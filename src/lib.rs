@@ -68,6 +68,7 @@ macro_rules! algorithm {
         flash_address: $flash_address:expr,
         flash_size: $flash_size:expr,
         page_size: $page_size:expr,
+        empty_value: $empty_value:expr,
         sectors: [$({
             size: $size:expr,
             address: $address:expr,
@@ -164,7 +165,7 @@ macro_rules! algorithm {
             page_size: $page_size,
             _reserved: 0,
             // The empty state of a byte in flash.
-            empty: 0xff,
+            empty: $empty_value,
             // This value can be used to estimate the amount of time the flashing procedure takes worst case.
             program_time_out: 1000,
             // This value can be used to estimate the amount of time the erasing procedure takes worst case.
