@@ -1,0 +1,34 @@
+on:
+  push:
+    branches: [master, staging, trying]
+  pull_request:
+
+name: Run CI
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install stable toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        target: thumbv7em-none-eabi
+    - name: Cache Dependencies
+      uses: Swatinem/rust-cache@v2.2.0
+    - name: Install Dependencies
+      run: |
+        sudo apt update
+        cargo install cargo-binutils
+        rustup component add llvm-tools-preview
+    - name: Check
+      run: cargo check --target thumbv7em-none-eabi
+    - name: Clippy
+      run: cargo clippy --target thumbv7em-none-eabi
+    - name: Format
+      run: cargo fmt

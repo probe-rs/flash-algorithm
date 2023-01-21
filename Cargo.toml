@@ -1,0 +1,11 @@
+[package]
+name = "flash-algorithm"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+keywords = ["no-std", "embedded", "flashing"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/probe-rs/flash-algorithm"
+description = "A crate to write CMSIS-DAP flash algorithms for flashing embedded targets."
+
+[dependencies]
