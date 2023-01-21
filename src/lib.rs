@@ -64,7 +64,15 @@ pub enum Function {
 /// and checking the flash algorithm initialization status.
 #[macro_export]
 macro_rules! algorithm {
-    ($type:ty) => {
+    ($type:ty, {
+        flash_address: $flash_address:expr,
+        flash_size: $flash_size:expr,
+        page_size: $page_size:expr,
+        sectors: [$({
+            size: $size:expr,
+            address: $address:expr,
+        }),+]
+    }) => {
         static mut _IS_INIT: bool = false;
         static mut _ALGO_INSTANCE: MaybeUninit<$type> = MaybeUninit::uninit();
 
@@ -136,5 +144,74 @@ macro_rules! algorithm {
                 Err(e) => e.get(),
             }
         }
+
+        #[allow(non_upper_case_globals)]
+        #[no_mangle]
+        #[used]
+        #[link_section = "DeviceData"]
+        pub static FlashDevice: FlashDeviceDescription = FlashDeviceDescription {
+            // The version is never read by probe-rs and can be fixed.
+            vers: 0x0,
+            // The device name here can be customized but it really has no real use
+            // appart from identifying the device the ELF is intended for which we have
+            // in our YAML.
+            dev_name: [0u8; 128],
+            // The specification does not specify the values that can go here,
+            // but this value means internal flash device.
+            dev_type: 5,
+            dev_addr: $flash_address,
+            device_size: $flash_size,
+            page_size: $page_size,
+            _reserved: 0,
+            // The empty state of a byte in flash.
+            empty: 0xff,
+            // This value can be used to estimate the amount of time the flashing procedure takes worst case.
+            program_time_out: 1000,
+            // This value can be used to estimate the amount of time the erasing procedure takes worst case.
+            erase_time_out: 2000,
+            flash_sectors: [
+                $(
+                    FlashSector {
+                        size: $size,
+                        address: $address,
+                    }
+                ),+,
+                // This marks the end of the flash sector list.
+                FlashSector {
+                    size: 0xffff_ffff,
+                    address: 0xffff_ffff,
+                }
+            ],
+        };
+
+        #[repr(C)]
+        pub struct FlashDeviceDescription {
+            vers: u16,
+            dev_name: [u8; 128],
+            dev_type: u16,
+            dev_addr: u32,
+            device_size: u32,
+            page_size: u32,
+            _reserved: u32,
+            empty: u8,
+            program_time_out: u32,
+            erase_time_out: u32,
+
+            flash_sectors: [FlashSector; $crate::count!($($size)*) + 1],
+        }
+
+        #[repr(C)]
+        #[derive(Copy, Clone)]
+        pub struct FlashSector {
+            size: u32,
+            address: u32,
+        }
     };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! count {
+    () => (0usize);
+    ( $x:tt $($xs:tt)* ) => (1usize + count!($($xs)*));
 }

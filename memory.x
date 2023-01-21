@@ -35,6 +35,30 @@ SECTIONS {
         . = ALIGN(4);
     }
 
+    /* Section for data, specified by flashloader standard. */
+    PrgData : {
+        *(.data .data.*)
+        *(.sdata .sdata.*)
+    }
+
+    PrgData : {
+        /* Zero-initialized data */
+        *(.bss .bss.*)
+        *(.sbss .sbss.*)
+
+        *(COMMON)
+    }
+
+    /* Description of the flash algorithm */
+    DeviceData . : {
+        /* The device data content is only for external tools,
+         * and usually not referenced by the code.
+         *
+         * The KEEP statement ensures it's not removed by accident.
+         */
+        KEEP(*(DeviceData))
+    }
+
     /DISCARD/ : {
         /* Unused exception related info that only wastes space */
         *(.ARM.exidx);
