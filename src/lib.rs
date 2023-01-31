@@ -46,9 +46,8 @@ pub trait FlashAlgorithm: Sized + 'static {
     /// # Arguments
     ///
     /// * `address` - The start address of the flash page to program.
-    /// * `size` - Specifies the size of the data buffer.
     /// * `data` - The data to be written to the page.
-    fn program_page(&mut self, address: u32, size: u32, data: *const u8) -> Result<(), ErrorCode>;
+    fn program_page(&mut self, address: u32, data: &[u8]) -> Result<(), ErrorCode>;
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -140,7 +139,8 @@ macro_rules! algorithm {
                 return 1;
             }
             let this = &mut *_ALGO_INSTANCE.as_mut_ptr();
-            match <$type as FlashAlgorithm>::program_page(this, addr, size, data) {
+            let data_slice: &[u8] = unsafe { core::slice::from_raw_parts(data, size as usize) };
+            match <$type as FlashAlgorithm>::program_page(this, addr, data_slice) {
                 Ok(()) => 0,
                 Err(e) => e.get(),
             }
