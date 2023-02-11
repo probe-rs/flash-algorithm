@@ -1,8 +1,18 @@
+//! Implement a [CMSIS-Pack] flash algorithm in Rust
+//! 
+//! [CMSIS-Pack]: https://open-cmsis-pack.github.io/Open-CMSIS-Pack-Spec/main/html/flashAlgorithm.html
+//! 
+//! # Feature flags
+//! 
+//! - `panic-handler` this is enabled by default and includes a simple abort-on-panic
+//!   panic handler. Disable this feature flag if you would prefer to use a different
+//!   handler.
+
 #![no_std]
 #![no_main]
 #![macro_use]
 
-#[cfg(not(test))]
+#[cfg(all(not(test), feature = "panic-handler"))]
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     unsafe {
