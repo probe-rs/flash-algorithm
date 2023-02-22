@@ -32,6 +32,7 @@ pub trait FlashAlgorithm: Sized + 'static {
     fn new(address: u32, clock: u32, function: Function) -> Result<Self, ErrorCode>;
 
     /// Erase entire chip. Will only be called after [`FlashAlgorithm::new()`] with [`Function::Erase`].
+    #[cfg(feature = "erase-chip")]
     fn erase_all(&mut self) -> Result<(), ErrorCode>;
 
     /// Erase sector. Will only be called after [`FlashAlgorithm::new()`] with [`Function::Erase`].
@@ -110,18 +111,6 @@ macro_rules! algorithm {
         }
         #[no_mangle]
         #[link_section = ".entry"]
-        pub unsafe extern "C" fn EraseChip() -> u32 {
-            if !_IS_INIT {
-                return 1;
-            }
-            let this = &mut *_ALGO_INSTANCE.as_mut_ptr();
-            match <$type as FlashAlgorithm>::erase_all(this) {
-                Ok(()) => 0,
-                Err(e) => e.get(),
-            }
-        }
-        #[no_mangle]
-        #[link_section = ".entry"]
         pub unsafe extern "C" fn EraseSector(addr: u32) -> u32 {
             if !_IS_INIT {
                 return 1;
@@ -145,6 +134,7 @@ macro_rules! algorithm {
                 Err(e) => e.get(),
             }
         }
+        $crate::erase_chip!($type);
 
         #[allow(non_upper_case_globals)]
         #[no_mangle]
@@ -208,6 +198,32 @@ macro_rules! algorithm {
             address: u32,
         }
     };
+}
+
+#[doc(hidden)]
+#[macro_export]
+#[cfg(not(feature = "erase-chip"))]
+macro_rules! erase_chip {
+    ($type:ty) => {}
+}
+#[doc(hidden)]
+#[macro_export]
+#[cfg(feature = "erase-chip")]
+macro_rules! erase_chip {
+    ($type:ty) => {
+        #[no_mangle]
+        #[link_section = ".entry"]
+        pub unsafe extern "C" fn EraseChip() -> u32 {
+            if !_IS_INIT {
+                return 1;
+            }
+            let this = &mut *_ALGO_INSTANCE.as_mut_ptr();
+            match <$type as FlashAlgorithm>::erase_all(this) {
+                Ok(()) => 0,
+                Err(e) => e.get(),
+            }
+        }
+    }
 }
 
 #[doc(hidden)]
