@@ -9,3 +9,7 @@ repository = "https://github.com/probe-rs/flash-algorithm"
 description = "A crate to write CMSIS-DAP flash algorithms for flashing embedded targets."
 
 [dependencies]
+
+[features]
+default = ["erase-chip"]
+erase-chip = []
