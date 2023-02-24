@@ -11,5 +11,7 @@ description = "A crate to write CMSIS-DAP flash algorithms for flashing embedded
 [dependencies]
 
 [features]
-default = ["erase-chip"]
+default = ["erase-chip", "panic-handler"]
 erase-chip = []
+panic-handler = []
+
