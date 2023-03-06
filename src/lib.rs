@@ -1,9 +1,9 @@
 //! Implement a [CMSIS-Pack] flash algorithm in Rust
-//! 
+//!
 //! [CMSIS-Pack]: https://open-cmsis-pack.github.io/Open-CMSIS-Pack-Spec/main/html/flashAlgorithm.html
-//! 
+//!
 //! # Feature flags
-//! 
+//!
 //! - `panic-handler` this is enabled by default and includes a simple abort-on-panic
 //!   panic handler. Disable this feature flag if you would prefer to use a different
 //!   handler.
@@ -59,6 +59,16 @@ pub trait FlashAlgorithm: Sized + 'static {
     /// * `address` - The start address of the flash page to program.
     /// * `data` - The data to be written to the page.
     fn program_page(&mut self, address: u32, data: &[u8]) -> Result<(), ErrorCode>;
+
+    /// Verify the firmware that has been programmed.  Will only be called after [`FlashAlgorithm::new()`] with [`Function::Verify`].
+    ///
+    /// # Arguments
+    ///
+    /// * `address` - The start address of the flash to verify.
+    /// * `size` - The length of the data to verify.
+    /// * `data` - The data to compare with.
+    #[cfg(feature = "verify")]
+    fn verify(&mut self, address: u32, size: u32, data: Option<&[u8]>) -> Result<(), ErrorCode>;
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -145,6 +155,7 @@ macro_rules! algorithm {
             }
         }
         $crate::erase_chip!($type);
+        $crate::verify!($type);
 
         #[allow(non_upper_case_globals)]
         #[no_mangle]
@@ -214,7 +225,7 @@ macro_rules! algorithm {
 #[macro_export]
 #[cfg(not(feature = "erase-chip"))]
 macro_rules! erase_chip {
-    ($type:ty) => {}
+    ($type:ty) => {};
 }
 #[doc(hidden)]
 #[macro_export]
@@ -233,7 +244,42 @@ macro_rules! erase_chip {
                 Err(e) => e.get(),
             }
         }
-    }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+#[cfg(not(feature = "verify"))]
+macro_rules! verify {
+    ($type:ty) => {};
+}
+#[doc(hidden)]
+#[macro_export]
+#[cfg(feature = "verify")]
+macro_rules! verify {
+    ($type:ty) => {
+        #[no_mangle]
+        #[link_section = ".entry"]
+        pub unsafe extern "C" fn Verify(addr: u32, size: u32, data: *const u8) -> u32 {
+            if !_IS_INIT {
+                return 1;
+            }
+            let this = &mut *_ALGO_INSTANCE.as_mut_ptr();
+
+            if data.is_null() {
+                match <$type as FlashAlgorithm>::verify(this, addr, size, None) {
+                    Ok(()) => 0,
+                    Err(e) => e.get(),
+                }
+            } else {
+                let data_slice: &[u8] = unsafe { core::slice::from_raw_parts(data, size as usize) };
+                match <$type as FlashAlgorithm>::verify(this, addr, size, Some(data_slice)) {
+                    Ok(()) => 0,
+                    Err(e) => e.get(),
+                }
+            }
+        }
+    };
 }
 
 #[doc(hidden)]
