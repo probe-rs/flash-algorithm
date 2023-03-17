@@ -85,7 +85,7 @@ macro_rules! algorithm {
         }),+]
     }) => {
         static mut _IS_INIT: bool = false;
-        static mut _ALGO_INSTANCE: MaybeUninit<$type> = MaybeUninit::uninit();
+        static mut _ALGO_INSTANCE: core::mem::MaybeUninit<$type> = core::mem::MaybeUninit::uninit();
 
         #[no_mangle]
         #[link_section = ".entry"]
