@@ -1,9 +1,9 @@
 //! Implement a [CMSIS-Pack] flash algorithm in Rust
-//! 
+//!
 //! [CMSIS-Pack]: https://open-cmsis-pack.github.io/Open-CMSIS-Pack-Spec/main/html/flashAlgorithm.html
-//! 
+//!
 //! # Feature flags
-//! 
+//!
 //! - `panic-handler` this is enabled by default and includes a simple abort-on-panic
 //!   panic handler. Disable this feature flag if you would prefer to use a different
 //!   handler.
@@ -85,7 +85,7 @@ macro_rules! algorithm {
         }),+]
     }) => {
         static mut _IS_INIT: bool = false;
-        static mut _ALGO_INSTANCE: MaybeUninit<$type> = MaybeUninit::uninit();
+        static mut _ALGO_INSTANCE: core::mem::MaybeUninit<$type> = core::mem::MaybeUninit::uninit();
 
         #[no_mangle]
         #[link_section = ".entry"]
