@@ -85,10 +85,14 @@ pub enum Function {
 #[macro_export]
 macro_rules! algorithm {
     ($type:ty, {
+        device_name: $device_name:expr,
+        device_type: $device_type:expr,
         flash_address: $flash_address:expr,
         flash_size: $flash_size:expr,
         page_size: $page_size:expr,
         empty_value: $empty_value:expr,
+        program_time_out: $program_time_out:expr,
+        erase_time_out: $erase_time_out:expr,
         sectors: [$({
             size: $size:expr,
             address: $address:expr,
@@ -96,6 +100,8 @@ macro_rules! algorithm {
     }) => {
         static mut _IS_INIT: bool = false;
         static mut _ALGO_INSTANCE: core::mem::MaybeUninit<$type> = core::mem::MaybeUninit::uninit();
+
+        core::arch::global_asm!(".section .PrgData, \"aw\"");
 
         #[no_mangle]
         #[link_section = ".entry"]
@@ -108,9 +114,9 @@ macro_rules! algorithm {
                 1 => $crate::Function::Erase,
                 2 => $crate::Function::Program,
                 3 => $crate::Function::Verify,
-                _ => panic!("This branch can only be reached if the host library sent an unknown function code.")
+                _ => core::panic!("This branch can only be reached if the host library sent an unknown function code.")
             };
-            match <$type as FlashAlgorithm>::new(addr, clock, function) {
+            match <$type as $crate::FlashAlgorithm>::new(addr, clock, function) {
                 Ok(inst) => {
                     _ALGO_INSTANCE.as_mut_ptr().write(inst);
                     _IS_INIT = true;
@@ -136,7 +142,7 @@ macro_rules! algorithm {
                 return 1;
             }
             let this = &mut *_ALGO_INSTANCE.as_mut_ptr();
-            match <$type as FlashAlgorithm>::erase_sector(this, addr) {
+            match <$type as $crate::FlashAlgorithm>::erase_sector(this, addr) {
                 Ok(()) => 0,
                 Err(e) => e.get(),
             }
@@ -149,7 +155,7 @@ macro_rules! algorithm {
             }
             let this = &mut *_ALGO_INSTANCE.as_mut_ptr();
             let data_slice: &[u8] = unsafe { core::slice::from_raw_parts(data, size as usize) };
-            match <$type as FlashAlgorithm>::program_page(this, addr, data_slice) {
+            match <$type as $crate::FlashAlgorithm>::program_page(this, addr, data_slice) {
                 Ok(()) => 0,
                 Err(e) => e.get(),
             }
@@ -163,14 +169,14 @@ macro_rules! algorithm {
         #[link_section = "DeviceData"]
         pub static FlashDevice: FlashDeviceDescription = FlashDeviceDescription {
             // The version is never read by probe-rs and can be fixed.
-            vers: 0x0,
+            vers: 0x1,
             // The device name here can be customized but it really has no real use
             // appart from identifying the device the ELF is intended for which we have
             // in our YAML.
-            dev_name: [0u8; 128],
+            dev_name: $crate::arrayify_string($device_name),
             // The specification does not specify the values that can go here,
             // but this value means internal flash device.
-            dev_type: 5,
+            dev_type: $device_type,
             dev_addr: $flash_address,
             device_size: $flash_size,
             page_size: $page_size,
@@ -178,9 +184,9 @@ macro_rules! algorithm {
             // The empty state of a byte in flash.
             empty: $empty_value,
             // This value can be used to estimate the amount of time the flashing procedure takes worst case.
-            program_time_out: 1000,
+            program_time_out: $program_time_out,
             // This value can be used to estimate the amount of time the erasing procedure takes worst case.
-            erase_time_out: 2000,
+            erase_time_out: $erase_time_out,
             flash_sectors: [
                 $(
                     FlashSector {
@@ -200,7 +206,7 @@ macro_rules! algorithm {
         pub struct FlashDeviceDescription {
             vers: u16,
             dev_name: [u8; 128],
-            dev_type: u16,
+            dev_type: DeviceType,
             dev_addr: u32,
             device_size: u32,
             page_size: u32,
@@ -217,6 +223,17 @@ macro_rules! algorithm {
         pub struct FlashSector {
             size: u32,
             address: u32,
+        }
+
+        #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+        #[repr(u16)]
+        pub enum DeviceType {
+            Unknown = 0,
+            Onchip = 1,
+            Ext8Bit = 2,
+            Ext16Bit = 3,
+            Ext32Bit = 4,
+            ExtSpi = 5,
         }
     };
 }
@@ -239,7 +256,7 @@ macro_rules! erase_chip {
                 return 1;
             }
             let this = &mut *_ALGO_INSTANCE.as_mut_ptr();
-            match <$type as FlashAlgorithm>::erase_all(this) {
+            match <$type as $crate::FlashAlgorithm>::erase_all(this) {
                 Ok(()) => 0,
                 Err(e) => e.get(),
             }
@@ -267,13 +284,14 @@ macro_rules! verify {
             let this = &mut *_ALGO_INSTANCE.as_mut_ptr();
 
             if data.is_null() {
-                match <$type as FlashAlgorithm>::verify(this, addr, size, None) {
+                match <$type as $crate::FlashAlgorithm>::verify(this, addr, size, None) {
                     Ok(()) => 0,
                     Err(e) => e.get(),
                 }
             } else {
                 let data_slice: &[u8] = unsafe { core::slice::from_raw_parts(data, size as usize) };
-                match <$type as FlashAlgorithm>::verify(this, addr, size, Some(data_slice)) {
+                match <$type as $crate::FlashAlgorithm>::verify(this, addr, size, Some(data_slice))
+                {
                     Ok(()) => 0,
                     Err(e) => e.get(),
                 }
@@ -286,5 +304,18 @@ macro_rules! verify {
 #[macro_export]
 macro_rules! count {
     () => (0usize);
-    ( $x:tt $($xs:tt)* ) => (1usize + count!($($xs)*));
+    ( $x:tt $($xs:tt)* ) => (1usize + $crate::count!($($xs)*));
+}
+
+pub const fn arrayify_string<const N: usize>(msg: &'static str) -> [u8; N] {
+    let mut arr = [0u8; N];
+    let mut idx = 0;
+    let msg_bytes = msg.as_bytes();
+
+    while (idx < msg_bytes.len()) && (idx < N) {
+        arr[idx] = msg_bytes[idx];
+        idx += 1;
+    }
+
+    arr
 }
