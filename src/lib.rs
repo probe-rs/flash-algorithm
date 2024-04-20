@@ -12,7 +12,10 @@
 #![no_main]
 #![macro_use]
 
-#[cfg(not(any(feature = "cortex-m", feature = "risc-v", feature = "panic-handler")))]
+#[cfg(all(
+    not(any(feature = "cortex-m", feature = "risc-v")),
+    all(not(test), feature = "panic-handler")
+))]
 compile_error!("Enable either the cortex-m or risc-v feature");
 
 #[cfg(all(not(test), feature = "panic-handler"))]
