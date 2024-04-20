@@ -12,11 +12,17 @@
 #![no_main]
 #![macro_use]
 
+#[cfg(not(any(feature = "cortex-m", feature = "risc-v", feature = "panic-handler")))]
+compile_error!("Enable either the cortex-m or risc-v feature");
+
 #[cfg(all(not(test), feature = "panic-handler"))]
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     unsafe {
+        #[cfg(feature = "cortex-m")]
         core::arch::asm!("udf #0");
+        #[cfg(feature = "risc-v")]
+        core::arch::asm!("UNIMP");
         core::hint::unreachable_unchecked();
     }
 }
