@@ -27,8 +27,8 @@ jobs:
         cargo install cargo-binutils
         rustup component add llvm-tools-preview
     - name: Check
-      run: cargo check --features cortex-m --target thumbv7em-none-eabi
+      run: cargo check --target thumbv7em-none-eabi
     - name: Clippy
-      run: cargo clippy --features cortex-m --target thumbv7em-none-eabi
+      run: cargo clippy --target thumbv7em-none-eabi
     - name: Format
       run: cargo fmt
