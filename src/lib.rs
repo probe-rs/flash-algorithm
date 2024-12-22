@@ -75,6 +75,15 @@ pub trait FlashAlgorithm: Sized + 'static {
     /// * `data` - The data to compare with.
     #[cfg(feature = "verify")]
     fn verify(&mut self, address: u32, size: u32, data: Option<&[u8]>) -> Result<(), ErrorCode>;
+
+    /// Read flash.
+    ///
+    /// # Arguments
+    ///
+    /// * `address` - The start address of the flash to read.
+    /// * `data` - The data.
+    #[cfg(feature = "read-flash")]
+    fn read_flash(&mut self, address: u32, data: &mut [u8]) -> Result<(), ErrorCode>;
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -167,6 +176,7 @@ macro_rules! algorithm {
             }
         }
         $crate::erase_chip!($type);
+        $crate::read_flash!($type);
         $crate::verify!($type);
 
         #[allow(non_upper_case_globals)]
@@ -263,6 +273,33 @@ macro_rules! erase_chip {
             }
             let this = &mut *_ALGO_INSTANCE.as_mut_ptr();
             match <$type as $crate::FlashAlgorithm>::erase_all(this) {
+                Ok(()) => 0,
+                Err(e) => e.get(),
+            }
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+#[cfg(not(feature = "read-flash"))]
+macro_rules! read_flash {
+    ($type:ty) => {};
+}
+#[doc(hidden)]
+#[macro_export]
+#[cfg(feature = "read-flash")]
+macro_rules! read_flash {
+    ($type:ty) => {
+        #[no_mangle]
+        #[link_section = ".entry"]
+        pub unsafe extern "C" fn ReadFlash(addr: u32, size: u32, data: *mut u8) -> u32 {
+            if !_IS_INIT {
+                return 1;
+            }
+            let this = &mut *_ALGO_INSTANCE.as_mut_ptr();
+            let data_slice: &mut [u8] = unsafe { core::slice::from_raw_parts_mut(data, size as usize) };
+            match <$type as $crate::FlashAlgorithm>::read_flash(this, addr, data_slice) {
                 Ok(()) => 0,
                 Err(e) => e.get(),
             }
