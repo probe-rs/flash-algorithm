@@ -185,35 +185,35 @@ macro_rules! algorithm {
         #[link_section = "DeviceData"]
         pub static FlashDevice: FlashDeviceDescription = FlashDeviceDescription {
             // The version is never read by probe-rs and can be fixed.
-            vers: 0x1,
+            vers: 0x1u16.to_le(),
             // The device name here can be customized but it really has no real use
             // appart from identifying the device the ELF is intended for which we have
             // in our YAML.
             dev_name: $crate::arrayify_string($device_name),
             // The specification does not specify the values that can go here,
             // but this value means internal flash device.
-            dev_type: $device_type,
-            dev_addr: $flash_address,
-            device_size: $flash_size,
-            page_size: $page_size,
+            dev_type: ($device_type as u16).to_le(),
+            dev_addr: ($flash_address as u32).to_le(),
+            device_size: ($flash_size as u32).to_le(),
+            page_size: ($page_size as u32).to_le(),
             _reserved: 0,
             // The empty state of a byte in flash.
-            empty: $empty_value,
+            empty: ($empty_value as u8).to_le(),
             // This value can be used to estimate the amount of time the flashing procedure takes worst case.
-            program_time_out: $program_time_out,
+            program_time_out: ($program_time_out as u32).to_le(),
             // This value can be used to estimate the amount of time the erasing procedure takes worst case.
-            erase_time_out: $erase_time_out,
+            erase_time_out: ($erase_time_out as u32).to_le(),
             flash_sectors: [
                 $(
                     FlashSector {
-                        size: $size,
-                        address: $address,
+                        size: ($size as u32).to_le(),
+                        address: ($address as u32).to_le(),
                     }
                 ),+,
                 // This marks the end of the flash sector list.
                 FlashSector {
-                    size: 0xffff_ffff,
-                    address: 0xffff_ffff,
+                    size: 0xffff_ffffu32.to_le(),
+                    address: 0xffff_ffffu32.to_le(),
                 }
             ],
         };
@@ -222,7 +222,7 @@ macro_rules! algorithm {
         pub struct FlashDeviceDescription {
             vers: u16,
             dev_name: [u8; 128],
-            dev_type: DeviceType,
+            dev_type: u16,
             dev_addr: u32,
             device_size: u32,
             page_size: u32,
