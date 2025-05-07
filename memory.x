@@ -16,6 +16,8 @@ SECTIONS {
 
         *(.text)
         *(.text.*)
+        /* TI naming convention */
+        *(.text:*)
 
         *(.rodata)
         *(.rodata.*)
