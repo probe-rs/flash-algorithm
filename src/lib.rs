@@ -30,6 +30,7 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 pub const FUNCTION_ERASE: u32 = 1;
 pub const FUNCTION_PROGRAM: u32 = 2;
 pub const FUNCTION_VERIFY: u32 = 3;
+pub const FUNCTION_BLANKCHECK: u32 = 4;
 
 pub type ErrorCode = core::num::NonZeroU32;
 
@@ -84,6 +85,15 @@ pub trait FlashAlgorithm: Sized + 'static {
     /// * `data` - The data.
     #[cfg(feature = "read-flash")]
     fn read_flash(&mut self, address: u32, data: &mut [u8]) -> Result<(), ErrorCode>;
+
+    /// Verify that flash is blank.
+    ///
+    /// # Arguments
+    ///
+    /// * `address` - The start address of the flash to check.
+    /// * `size` - The length of the area to check.
+    #[cfg(feature = "blank-check")]
+    fn blank_check(&mut self, address: u32, size: u32) -> Result<(), ErrorCode>;
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -91,6 +101,7 @@ pub enum Function {
     Erase = 1,
     Program = 2,
     Verify = 3,
+    BlankCheck = 4,
 }
 
 /// A macro to define a new flash algoritm.
@@ -121,20 +132,23 @@ macro_rules! algorithm {
         #[no_mangle]
         #[link_section = ".entry"]
         pub unsafe extern "C" fn Init(addr: u32, clock: u32, function: u32) -> u32 {
-            if _IS_INIT {
-                UnInit();
+            unsafe {
+                if _IS_INIT {
+                    UnInit();
+                }
+                _IS_INIT = true;
             }
-            _IS_INIT = true;
             let function = match function {
                 1 => $crate::Function::Erase,
                 2 => $crate::Function::Program,
                 3 => $crate::Function::Verify,
+                4 => $crate::Function::BlankCheck,
                 _ => core::panic!("This branch can only be reached if the host library sent an unknown function code.")
             };
             match <$type as $crate::FlashAlgorithm>::new(addr, clock, function) {
                 Ok(inst) => {
-                    _ALGO_INSTANCE.as_mut_ptr().write(inst);
-                    _IS_INIT = true;
+                    unsafe { _ALGO_INSTANCE.as_mut_ptr().write(inst) };
+                    unsafe { _IS_INIT = true };
                     0
                 }
                 Err(e) => e.get(),
@@ -143,20 +157,24 @@ macro_rules! algorithm {
         #[no_mangle]
         #[link_section = ".entry"]
         pub unsafe extern "C" fn UnInit() -> u32 {
-            if !_IS_INIT {
-                return 1;
+            unsafe {
+                if !_IS_INIT {
+                    return 1;
+                }
+                _ALGO_INSTANCE.as_mut_ptr().drop_in_place();
+                _IS_INIT = false;
             }
-            _ALGO_INSTANCE.as_mut_ptr().drop_in_place();
-            _IS_INIT = false;
             0
         }
         #[no_mangle]
         #[link_section = ".entry"]
         pub unsafe extern "C" fn EraseSector(addr: u32) -> u32 {
-            if !_IS_INIT {
-                return 1;
-            }
-            let this = &mut *_ALGO_INSTANCE.as_mut_ptr();
+            let this = unsafe {
+                if !unsafe { _IS_INIT } {
+                    return 1;
+                }
+                &mut *_ALGO_INSTANCE.as_mut_ptr()
+            };
             match <$type as $crate::FlashAlgorithm>::erase_sector(this, addr) {
                 Ok(()) => 0,
                 Err(e) => e.get(),
@@ -165,11 +183,14 @@ macro_rules! algorithm {
         #[no_mangle]
         #[link_section = ".entry"]
         pub unsafe extern "C" fn ProgramPage(addr: u32, size: u32, data: *const u8) -> u32 {
-            if !_IS_INIT {
-                return 1;
-            }
-            let this = &mut *_ALGO_INSTANCE.as_mut_ptr();
-            let data_slice: &[u8] = unsafe { core::slice::from_raw_parts(data, size as usize) };
+            let (this, data_slice) = unsafe {
+                if !_IS_INIT {
+                    return 1;
+                }
+                let this = &mut *_ALGO_INSTANCE.as_mut_ptr();
+                let data_slice: &[u8] = core::slice::from_raw_parts(data, size as usize);
+                (this, data_slice)
+            };
             match <$type as $crate::FlashAlgorithm>::program_page(this, addr, data_slice) {
                 Ok(()) => 0,
                 Err(e) => e.get(),
@@ -178,6 +199,7 @@ macro_rules! algorithm {
         $crate::erase_chip!($type);
         $crate::read_flash!($type);
         $crate::verify!($type);
+        $crate::blank_check!($type);
 
         #[allow(non_upper_case_globals)]
         #[no_mangle]
@@ -268,10 +290,12 @@ macro_rules! erase_chip {
         #[no_mangle]
         #[link_section = ".entry"]
         pub unsafe extern "C" fn EraseChip() -> u32 {
-            if !_IS_INIT {
-                return 1;
-            }
-            let this = &mut *_ALGO_INSTANCE.as_mut_ptr();
+            let this = unsafe {
+                if !_IS_INIT {
+                    return 1;
+                }
+                &mut *_ALGO_INSTANCE.as_mut_ptr()
+            };
             match <$type as $crate::FlashAlgorithm>::erase_all(this) {
                 Ok(()) => 0,
                 Err(e) => e.get(),
@@ -294,11 +318,14 @@ macro_rules! read_flash {
         #[no_mangle]
         #[link_section = ".entry"]
         pub unsafe extern "C" fn ReadFlash(addr: u32, size: u32, data: *mut u8) -> u32 {
-            if !_IS_INIT {
-                return 1;
-            }
-            let this = &mut *_ALGO_INSTANCE.as_mut_ptr();
-            let data_slice: &mut [u8] = unsafe { core::slice::from_raw_parts_mut(data, size as usize) };
+            let (this, data_slice) = unsafe {
+                if !_IS_INIT {
+                    return 1;
+                }
+                let this = &mut *_ALGO_INSTANCE.as_mut_ptr();
+                let data_slice: &mut [u8] = core::slice::from_raw_parts_mut(data, size as usize);
+                (this, data_slice)
+            };
             match <$type as $crate::FlashAlgorithm>::read_flash(this, addr, data_slice) {
                 Ok(()) => 0,
                 Err(e) => e.get(),
@@ -321,10 +348,12 @@ macro_rules! verify {
         #[no_mangle]
         #[link_section = ".entry"]
         pub unsafe extern "C" fn Verify(addr: u32, size: u32, data: *const u8) -> u32 {
-            if !_IS_INIT {
-                return 1;
-            }
-            let this = &mut *_ALGO_INSTANCE.as_mut_ptr();
+            let this = unsafe {
+                if !_IS_INIT {
+                    return 1;
+                }
+                &mut *_ALGO_INSTANCE.as_mut_ptr()
+            };
 
             if data.is_null() {
                 match <$type as $crate::FlashAlgorithm>::verify(this, addr, size, None) {
@@ -338,6 +367,34 @@ macro_rules! verify {
                     Ok(()) => 0,
                     Err(e) => e.get(),
                 }
+            }
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+#[cfg(not(feature = "blank-check"))]
+macro_rules! blank_check {
+    ($type:ty) => {};
+}
+#[doc(hidden)]
+#[macro_export]
+#[cfg(feature = "blank-check")]
+macro_rules! blank_check {
+    ($type:ty) => {
+        #[no_mangle]
+        #[link_section = ".entry"]
+        pub unsafe extern "C" fn BlankCheck(addr: u32, size: u32) -> u32 {
+            let this = unsafe {
+                if !_IS_INIT {
+                    return 1;
+                }
+                &mut *_ALGO_INSTANCE.as_mut_ptr()
+            };
+            match <$type as $crate::FlashAlgorithm>::blank_check(this, addr, size) {
+                Ok(()) => 0,
+                Err(e) => e.get(),
             }
         }
     };
