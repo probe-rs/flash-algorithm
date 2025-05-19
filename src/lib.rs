@@ -92,8 +92,9 @@ pub trait FlashAlgorithm: Sized + 'static {
     ///
     /// * `address` - The start address of the flash to check.
     /// * `size` - The length of the area to check.
+    /// * `pattern` - A pattern to be checked. The algorithm may choose ignore this value.
     #[cfg(feature = "blank-check")]
-    fn blank_check(&mut self, address: u32, size: u32) -> Result<(), ErrorCode>;
+    fn blank_check(&mut self, address: u32, size: u32, pattern: u8) -> Result<(), ErrorCode>;
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -385,14 +386,14 @@ macro_rules! blank_check {
     ($type:ty) => {
         #[no_mangle]
         #[link_section = ".entry"]
-        pub unsafe extern "C" fn BlankCheck(addr: u32, size: u32) -> u32 {
+        pub unsafe extern "C" fn BlankCheck(addr: u32, size: u32, pattern: u8) -> u32 {
             let this = unsafe {
                 if !_IS_INIT {
                     return 1;
                 }
                 &mut *_ALGO_INSTANCE.as_mut_ptr()
             };
-            match <$type as $crate::FlashAlgorithm>::blank_check(this, addr, size) {
+            match <$type as $crate::FlashAlgorithm>::blank_check(this, addr, size, pattern) {
                 Ok(()) => 0,
                 Err(e) => e.get(),
             }
