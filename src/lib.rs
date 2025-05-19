@@ -30,7 +30,7 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 pub const FUNCTION_ERASE: u32 = 1;
 pub const FUNCTION_PROGRAM: u32 = 2;
 pub const FUNCTION_VERIFY: u32 = 3;
-pub const FUNCTION_BLANKCHECK: u32 = 4;
+pub const FUNCTION_CUSTOMBLANKCHECK: u32 = 4;
 
 pub type ErrorCode = core::num::NonZeroU32;
 
@@ -92,8 +92,8 @@ pub trait FlashAlgorithm: Sized + 'static {
     ///
     /// * `address` - The start address of the flash to check.
     /// * `size` - The length of the area to check.
-    #[cfg(feature = "blank-check")]
-    fn blank_check(&mut self, address: u32, size: u32) -> Result<(), ErrorCode>;
+    #[cfg(feature = "custom-blank-check")]
+    fn custom_blank_check(&mut self, address: u32, size: u32) -> Result<(), ErrorCode>;
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -101,7 +101,7 @@ pub enum Function {
     Erase = 1,
     Program = 2,
     Verify = 3,
-    BlankCheck = 4,
+    CustomBlankCheck = 4,
 }
 
 /// A macro to define a new flash algoritm.
@@ -142,7 +142,7 @@ macro_rules! algorithm {
                 1 => $crate::Function::Erase,
                 2 => $crate::Function::Program,
                 3 => $crate::Function::Verify,
-                4 => $crate::Function::BlankCheck,
+                4 => $crate::Function::CustomBlankCheck,
                 _ => core::panic!("This branch can only be reached if the host library sent an unknown function code.")
             };
             match <$type as $crate::FlashAlgorithm>::new(addr, clock, function) {
@@ -199,7 +199,7 @@ macro_rules! algorithm {
         $crate::erase_chip!($type);
         $crate::read_flash!($type);
         $crate::verify!($type);
-        $crate::blank_check!($type);
+        $crate::custom_blank_check!($type);
 
         #[allow(non_upper_case_globals)]
         #[no_mangle]
@@ -374,25 +374,25 @@ macro_rules! verify {
 
 #[doc(hidden)]
 #[macro_export]
-#[cfg(not(feature = "blank-check"))]
-macro_rules! blank_check {
+#[cfg(not(feature = "custom-blank-check"))]
+macro_rules! custom_blank_check {
     ($type:ty) => {};
 }
 #[doc(hidden)]
 #[macro_export]
-#[cfg(feature = "blank-check")]
-macro_rules! blank_check {
+#[cfg(feature = "custom-blank-check")]
+macro_rules! custom_blank_check {
     ($type:ty) => {
         #[no_mangle]
         #[link_section = ".entry"]
-        pub unsafe extern "C" fn BlankCheck(addr: u32, size: u32) -> u32 {
+        pub unsafe extern "C" fn CustomBlankCheck(addr: u32, size: u32) -> u32 {
             let this = unsafe {
                 if !_IS_INIT {
                     return 1;
                 }
                 &mut *_ALGO_INSTANCE.as_mut_ptr()
             };
-            match <$type as $crate::FlashAlgorithm>::blank_check(this, addr, size) {
+            match <$type as $crate::FlashAlgorithm>::custom_blank_check(this, addr, size) {
                 Ok(()) => 0,
                 Err(e) => e.get(),
             }
