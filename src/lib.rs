@@ -74,8 +74,13 @@ pub trait FlashAlgorithm: Sized + 'static {
     /// * `address` - The start address of the flash to verify.
     /// * `size` - The length of the data to verify.
     /// * `data` - The data to compare with.
+    ///
+    /// # Return
+    ///
+    /// Return `Ok(())` on success, otherwise the first failing address as an error,
+    /// which must be less than `address + size`.
     #[cfg(feature = "verify")]
-    fn verify(&mut self, address: u32, size: u32, data: Option<&[u8]>) -> Result<(), ErrorCode>;
+    fn verify(&mut self, address: u32, size: u32, data: Option<&[u8]>) -> Result<(), u32>;
 
     /// Read flash.
     ///
@@ -358,15 +363,14 @@ macro_rules! verify {
 
             if data.is_null() {
                 match <$type as $crate::FlashAlgorithm>::verify(this, addr, size, None) {
-                    Ok(()) => 0,
-                    Err(e) => e.get(),
+                    Ok(()) => addr.wrapping_add(size),
+                    Err(e) => e,
                 }
             } else {
                 let data_slice: &[u8] = unsafe { core::slice::from_raw_parts(data, size as usize) };
-                match <$type as $crate::FlashAlgorithm>::verify(this, addr, size, Some(data_slice))
-                {
-                    Ok(()) => 0,
-                    Err(e) => e.get(),
+                match <$type as $crate::FlashAlgorithm>::verify(this, addr, size, Some(data_slice)) {
+                    Ok(()) => addr.wrapping_add(size),
+                    Err(e) => e,
                 }
             }
         }
